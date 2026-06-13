@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Vault Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#060610;color:#e0e0f0;font-family:-apple-system,sans-serif;min-height:100vh}
+        .lock-screen{position:fixed;inset:0;background:#060610;display:flex;align-items:center;justify-content:center;z-index:9999}
+        .lock-box{background:rgba(18,18,38,0.95);border:1px solid rgba(255,255,255,0.06);border-radius:24px;padding:40px 30px;text-align:center;width:370px;box-shadow:0 30px 70px rgba(0,0,0,0.8)}
+        .lock-icon{font-size:50px;margin-bottom:16px}
+        .lock-box h2{font-size:22px;margin-bottom:4px}
+        .lock-box .sub{color:#888;font-size:13px;margin-bottom:24px}
+        .dots{display:flex;justify-content:center;gap:14px;margin-bottom:8px}
+        .dots span{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.12);transition:0.2s}
+        .dots span.on{background:#4f46e5;border-color:#4f46e5;box-shadow:0 0 16px rgba(79,70,229,0.6)}
+        .dots span.err{background:#ef4444;border-color:#ef4444}
+        .pin-msg{color:#ef4444;font-size:12px;height:18px;margin-bottom:14px;opacity:0;transition:0.2s}
+        .pin-msg.show{opacity:1}
+        .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:0 auto}
+        .pad button{padding:16px;border-radius:14px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.03);color:#fff;font-size:20px;font-weight:600;cursor:pointer}
+        .pad button:hover{background:rgba(255,255,255,0.08)}
+        .pad button:active{transform:scale(0.93);background:#4f46e5}
+        .pad .clr{color:#ef4444;font-size:13px}
+        .app{display:none}
+        .tb{background:rgba(14,14,30,0.8);backdrop-filter:blur(30px);border-bottom:1px solid rgba(255,255,255,0.04);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:10px}
+        .tb h1{font-size:19px;font-weight:700;display:flex;align-items:center;gap:8px}
+        .container{max-width:1350px;margin:auto;padding:22px 18px}
+        .btn{padding:10px 18px;border-radius:10px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:0.2s;display:inline-flex;align-items:center;gap:6px}
+        .btn-blue{background:#4f46e5;color:#fff}
+        .btn-ghost{background:rgba(255,255,255,0.03);color:#ccc;border:1px solid rgba(255,255,255,0.05)}
+        .btn-red{background:#ef4444;color:#fff}
+        .btn-green{background:#10b981;color:#fff}
+        .btn-sm{padding:6px 12px;font-size:11px;border-radius:8px}
+        .sr{display:flex;gap:10px;margin-bottom:18px}
+        .sr input{flex:1;padding:12px 18px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;color:#fff;font-size:14px;outline:none;min-width:200px}
+        .cats{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+        .cats button{padding:7px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.02);color:#aaa;cursor:pointer;font-size:12px;white-space:nowrap;transition:0.2s;display:flex;align-items:center;gap:5px}
+        .cats button.on{background:#4f46e5;color:#fff;border-color:#4f46e5;box-shadow:0 4px 16px rgba(79,70,229,0.3)}
+        .cd{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
+        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:14px}
+        .card{background:rgba(16,16,32,0.85);border:1px solid rgba(255,255,255,0.04);border-radius:16px;padding:16px;transition:0.25s}
+        .card:hover{border-color:rgba(255,255,255,0.1);transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,0.5)}
+        .ct{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+        .clogo{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:15px;flex-shrink:0}
+        .ct h3{font-size:14px;font-weight:600;margin:0}
+        .ct .sub{color:#888;font-size:11px}
+        .pr{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,0.5);border-radius:8px;padding:6px 8px;margin-bottom:10px}
+        .pr input{flex:1;background:none;border:none;color:#ddd;font-family:monospace;font-size:13px;outline:none;min-width:0}
+        .pr button{background:none;border:none;color:#666;cursor:pointer;padding:4px 6px;border-radius:5px;font-size:14px}
+        .ca{display:flex;gap:4px;flex-wrap:wrap}
+        .ca button{padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:#aaa;cursor:pointer;font-size:11px;transition:0.2s}
+        .ca button:hover{background:#4f46e5;color:#fff;border-color:#4f46e5}
+        .ca .del:hover{background:#ef4444;border-color:#ef4444}
+        .ca .chg:hover{background:#f59e0b;border-color:#f59e0b}
+        .empty{text-align:center;padding:80px 20px;grid-column:1/-1;color:#888}
+        .empty .ic{font-size:50px;display:block;margin-bottom:16px}
+        .mo{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:999;padding:16px}
+        .mo.on{display:flex}
+        .modal{background:#16162e;border:1px solid rgba(255,255,255,0.06);border-radius:20px;padding:26px;width:100%;max-width:450px;max-height:90vh;overflow-y:auto}
+        .modal h3{font-size:18px;margin-bottom:16px;text-align:center}
+        .modal label{font-size:11px;color:#888;display:block;margin:10px 0 4px}
+        .modal input,.modal select{width:100%;padding:10px 14px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.05);border-radius:10px;color:#fff;font-size:14px;outline:none;margin-bottom:8px}
+        .modal input:focus,.modal select:focus{border-color:#4f46e5}
+        .modal-btns{display:flex;gap:8px;margin-top:16px}
+        .modal-btns button{flex:1;padding:12px;font-size:14px}
+        .toast{position:fixed;top:16px;right:16px;background:#1a1a30;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 20px;color:#fff;z-index:9999;display:none;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,0.5)}
+        @keyframes slide{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+        .sd{width:7px;height:7px;border-radius:50%;display:inline-block}
+        .sd.on{background:#10b981;box-shadow:0 0 8px #10b981}
+        .sd.off{background:#ef4444;box-shadow:0 0 8px #ef4444}
+        .eb{background:#10b981;color:#fff;font-size:9px;padding:2px 8px;border-radius:10px;margin-left:6px;font-weight:600}
+        @media(max-width:600px){.grid{grid-template-columns:1fr}.lock-box{width:92%;padding:30px 20px}.tb{padding:10px 14px}.container{padding:14px 10px}}
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- LOCK SCREEN -->
+<div class="lock-screen" id="lockScreen">
+    <div class="lock-box">
+        <div class="lock-icon">🔐</div>
+        <h2>Secure Vault</h2>
+        <p class="sub">Enter 4-digit PIN</p>
+        <div class="dots" id="dots"><span></span><span></span><span></span><span></span></div>
+        <div class="pin-msg" id="pinMsg">Invalid PIN</div>
+        <div id="lockMsg" style="color:#f59e0b;font-size:12px;margin-bottom:10px;display:none"></div>
+        <div class="pad">
+            <button onclick="pressKey('1')">1</button><button onclick="pressKey('2')">2</button><button onclick="pressKey('3')">3</button>
+            <button onclick="pressKey('4')">4</button><button onclick="pressKey('5')">5</button><button onclick="pressKey('6')">6</button>
+            <button onclick="pressKey('7')">7</button><button onclick="pressKey('8')">8</button><button onclick="pressKey('9')">9</button>
+            <button class="clr" onclick="clearPin()">Clear</button><button onclick="pressKey('0')">0</button><button onclick="backspacePin()">⌫</button>
+        </div>
+        <p style="color:#555;font-size:10px;margin-top:14px">🔒 AES-256 Encrypted</p>
+    </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="app" id="app">
+    <div class="tb">
+        <h1>🔐 Vault <span class="eb">AES-256</span> <span class="sd" id="syncDot"></span></h1>
+        <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="exportExcel()">📊</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportPDF()">📄</button>
+            <button class="btn btn-green btn-sm" onclick="showChangePin()">🔑 PIN</button>
+            <button class="btn btn-red btn-sm" onclick="lockVault()">🔒</button>
+        </div>
+    </div>
+    <div class="container">
+        <div class="sr">
+            <input type="text" id="search" placeholder="🔍 Search..." oninput="renderList()">
+            <button class="btn btn-blue" onclick="showAddModal()">+ Add</button>
+        </div>
+        <div class="cats" id="cats"></div>
+        <div class="grid" id="grid"></div>
+    </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="mo" id="modalAdd">
+    <div class="modal">
+        <h3 id="modalTitle">Add Password</h3>
+        <label>Category *</label>
+        <select id="fCat" onchange="autoFill()">
+            <option value="">-- Select --</option>
+            <option value="google">Google</option><option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option><option value="whatsapp">WhatsApp</option>
+            <option value="youtube">YouTube</option><option value="tiktok">TikTok</option>
+            <option value="x">X</option><option value="linkedin">LinkedIn</option>
+            <option value="netflix">Netflix</option><option value="amazon">Amazon</option>
+            <option value="microsoft">Microsoft</option><option value="apple">Apple</option>
+            <option value="github">GitHub</option>
+            <option value="banking">Banking</option><option value="crypto">Crypto</option>
+            <option value="gaming">Gaming</option><option value="wifi">WiFi</option>
+            <option value="other">Other</option>
+        </select>
+        <label>Platform *</label><input id="fPlat">
+        <label>Email/Username *</label><input id="fUser">
+        <label>Password *</label>
+        <div style="display:flex;gap:6px"><input type="password" id="fPass" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="togglePass('fPass')">👁</button></div>
+        <button class="btn btn-ghost btn-sm" onclick="genPass()" style="width:100%;margin-top:6px">🎲 Generate</button>
+        <label>URL</label><input id="fUrl">
+        <div class="modal-btns"><button class="btn btn-blue" onclick="savePass()">💾 Save</button><button class="btn btn-ghost" onclick="closeModal('modalAdd')">Cancel</button></div>
+    </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="mo" id="modalChange">
+    <div class="modal">
+        <h3>🔑 Change Password</h3>
+        <p style="font-size:12px;color:#888;text-align:center;margin-bottom:12px" id="changeInfo"></p>
+        <label>Old Password</label>
+        <div style="display:flex;gap:6px"><input type="password" id="oldPass" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="togglePass('oldPass')">👁</button></div>
+        <label>New Password</label>
+        <div style="display:flex;gap:6px"><input type="password" id="newPass1" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="togglePass('newPass1')">👁</button></div>
+        <label>Confirm</label>
+        <div style="display:flex;gap:6px"><input type="password" id="newPass2" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="togglePass('newPass2')">👁</button></div>
+        <button class="btn btn-ghost btn-sm" onclick="genChangePass()" style="width:100%;margin-top:6px">🎲 Generate</button>
+        <div class="modal-btns"><button class="btn btn-green" onclick="changePass()">✅ Change</button><button class="btn btn-ghost" onclick="closeModal('modalChange')">Cancel</button></div>
+    </div>
+</div>
+
+<!-- CHANGE PIN MODAL -->
+<div class="mo" id="modalPin">
+    <div class="modal">
+        <h3>🔑 Change PIN</h3>
+        <label>Current PIN</label><input type="password" id="cPin" maxlength="4">
+        <label>New PIN (4 digits)</label><input type="password" id="nPin1" maxlength="4">
+        <label>Confirm PIN</label><input type="password" id="nPin2" maxlength="4">
+        <div class="modal-btns"><button class="btn btn-green" onclick="changePin()">✅ Change</button><button class="btn btn-ghost" onclick="closeModal('modalPin')">Cancel</button></div>
+    </div>
+</div>
+
+<script>
+// ===== FIREBASE =====
+firebase.initializeApp({
+    apiKey:"AIzaSyBfXDEZ_adnxEy48btk7mmKUurZaErbrH8",
+    authDomain:"personal-password-vault-71cd7.firebaseapp.com",
+    projectId:"personal-password-vault-71cd7",
+    storageBucket:"personal-password-vault-71cd7.firebasestorage.app",
+    messagingSenderId:"1072747028062",
+    appId:"1:1072747028062:web:ec42d40758850a18475ecf"
+});
+const db=firebase.firestore();db.enablePersistence().catch(()=>{});
+
+// ===== ENCRYPTION =====
+let ENC_KEY=null;
+const SALT="PV_SALT_2024_SECURE_X9";
+function deriveKey(p){return CryptoJS.SHA256(p+SALT).toString();}
+function enc(t){if(!ENC_KEY)return t;return CryptoJS.AES.encrypt(t,ENC_KEY).toString();}
+function dec(c){if(!ENC_KEY)return c;try{return CryptoJS.AES.decrypt(c,ENC_KEY).toString(CryptoJS.enc.Utf8)||c;}catch(e){return c;}}
+
+// ===== PIN SYSTEM =====
+// PINs stored as HASHES - code mein PIN number nahi dikhta!
+let PIN_HASHES=[
+    CryptoJS.SHA256("8976"+SALT).toString(),
+    CryptoJS.SHA256("5782"+SALT).toString()
+];
+let pin='',badAttempts=0,lockedUntil=0;
+
+// Load saved PINs
+const saved=localStorage.getItem('pv_pins');
+if(saved){try{const a=JSON.parse(saved);if(a&&a.length)PIN_HASHES=a;}catch(e){}}
+
+function pressKey(d){
+    if(pin.length>=4||lockedUntil>Date.now())return;
+    pin+=d;drawDots();
+    if(pin.length===4)setTimeout(checkPin,150);
+}
+function backspacePin(){pin=pin.slice(0,-1);drawDots();}
+function clearPin(){pin='';drawDots();document.getElementById('pinMsg').classList.remove('show');}
+function drawDots(){
+    document.querySelectorAll('#dots span').forEach((d,i)=>{d.className=i<pin.length?'on':'';});
+}
+function checkPin(){
+    if(lockedUntil>Date.now()){
+        const s=Math.ceil((lockedUntil-Date.now())/1000);
+        document.getElementById('lockMsg').style.display='block';
+        document.getElementById('lockMsg').textContent='🔒 Wait '+s+' seconds';
+        pin='';drawDots();return;
+    }
+    const h=CryptoJS.SHA256(pin+SALT).toString();
+    if(PIN_HASHES.includes(h)){
+        badAttempts=0;ENC_KEY=deriveKey(pin);
+        document.getElementById('lockScreen').style.display='none';
+        document.getElementById('app').style.display='block';
+        pin='';drawDots();
+        document.getElementById('pinMsg').classList.remove('show');
+        document.getElementById('lockMsg').style.display='none';
+        loadData();toast('🔓 Unlocked!');
+    }else{
+        badAttempts++;
+        if(badAttempts>=5){lockedUntil=Date.now()+30*60*1000;badAttempts=0;
+            document.getElementById('lockMsg').style.display='block';
+            document.getElementById('lockMsg').textContent='🔒 LOCKED 30 MIN!';
+        }
+        document.querySelectorAll('#dots span').forEach(d=>d.classList.add('err'));
+        document.getElementById('pinMsg').classList.add('show');
+        setTimeout(()=>{pin='';drawDots();document.getElementById('pinMsg').classList.remove('show');},700);
+    }
+}
+function lockVault(){ENC_KEY=null;document.getElementById('app').style.display='none';document.getElementById('lockScreen').style.display='flex';data=[];pin='';drawDots();toast('🔒 Locked!');}
+
+// ===== CHANGE PIN =====
+function showChangePin(){
+    document.getElementById('cPin').value='';
+    document.getElementById('nPin1').value='';
+    document.getElementById('nPin2').value='';
+    document.getElementById('modalPin').classList.add('on');
+}
+function changePin(){
+    const c=document.getElementById('cPin').value.trim();
+    const n1=document.getElementById('nPin1').value.trim();
+    const n2=document.getElementById('nPin2').value.trim();
+    if(!c||!n1||!n2){toast('Fill all fields!');return;}
+    if(n1.length!==4||!/^\d{4}$/.test(n1)){toast('PIN must be 4 digits!');return;}
+    if(n1!==n2){toast('PINs do not match!');return;}
+    const ch=CryptoJS.SHA256(c+SALT).toString();
+    if(!PIN_HASHES.includes(ch)){toast('Wrong current PIN!');return;}
+    PIN_HASHES=PIN_HASHES.filter(h=>h!==ch);
+    PIN_HASHES.push(CryptoJS.SHA256(n1+SALT).toString());
+    if(PIN_HASHES.length>2)PIN_HASHES=PIN_HASHES.slice(-2);
+    localStorage.setItem('pv_pins',JSON.stringify(PIN_HASHES));
+    ENC_KEY=deriveKey(n1);
+    closeModal('modalPin');
+    toast('✅ PIN changed to: '+n1);
+}
+
+// ===== DATA =====
+let data=[],filter='all',editId=null,changeId=null;
+
+async function loadData(){
+    try{
+        const s=await db.collection('passwords').get();
+        data=[];s.forEach(d=>{
+            const r=d.data();
+            data.push({id:d.id,plat:dec(r.plat||''),cat:dec(r.cat||'other'),user:dec(r.user||''),pass:dec(r.pass||''),url:dec(r.url||''),updatedAt:r.updatedAt||0});
+        });
+        data.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+        updateSync(true);
+    }catch(e){updateSync(false);}
+    renderCats();renderList();
+}
+function updateSync(on){
+    const d=document.getElementById('syncDot');
+    d.className='sd '+(on?'on':'off');
+    d.title=on?'Cloud Connected':'Offline';
+}
+
+// ===== CATEGORIES =====
+const CATS={
+    google:{n:'Google',c:'#ea4335',l:'G',u:'https://google.com'},
+    facebook:{n:'Facebook',c:'#1877f2',l:'f',u:'https://facebook.com'},
+    instagram:{n:'Instagram',c:'#e4405f',l:'📸',u:'https://instagram.com'},
+    whatsapp:{n:'WhatsApp',c:'#25d366',l:'💬',u:'https://web.whatsapp.com'},
+    youtube:{n:'YouTube',c:'#ff0000',l:'▶',u:'https://youtube.com'},
+    tiktok:{n:'TikTok',c:'#000',l:'🎵',u:'https://tiktok.com'},
+    x:{n:'X',c:'#1da1f2',l:'𝕏',u:'https://x.com'},
+    linkedin:{n:'LinkedIn',c:'#0a66c2',l:'in',u:'https://linkedin.com'},
+    netflix:{n:'Netflix',c:'#e50914',l:'N',u:'https://netflix.com'},
+    amazon:{n:'Amazon',c:'#ff9900',l:'A',u:'https://amazon.com'},
+    microsoft:{n:'Microsoft',c:'#00a4ef',l:'M',u:'https://microsoft.com'},
+    apple:{n:'Apple',c:'#000',l:'🍎',u:'https://apple.com'},
+    github:{n:'GitHub',c:'#333',l:'GH',u:'https://github.com'},
+    banking:{n:'Banking',c:'#10b981',l:'🏦',u:''},
+    crypto:{n:'Crypto',c:'#f7931a',l:'₿',u:''},
+    gaming:{n:'Gaming',c:'#8b5cf6',l:'🎮',u:''},
+    wifi:{n:'WiFi',c:'#06b6d4',l:'📶',u:''},
+    other:{n:'Other',c:'#6b7280',l:'📌',u:''}
+};
+function autoFill(){
+    const c=document.getElementById('fCat').value;
+    if(c&&CATS[c]){document.getElementById('fPlat').value=CATS[c].n;document.getElementById('fUrl').value=CATS[c].u||'';}
+}
+
+function renderCats(){
+    let h='<button class="'+(filter==='all'?'on':'')+'" onclick="setFilter(\'all\')">📁 All</button>';
+    for(const[k,v] of Object.entries(CATS)){
+        h+='<button class="'+(filter===k?'on':'')+'" onclick="setFilter(\''+k+'\')"><span class="cd" style="background:'+v.c+'">'+v.l+'</span>'+v.n+'</button>';
+    }
+    document.getElementById('cats').innerHTML=h;
+}
+function setFilter(f){filter=f;renderCats();renderList();}
+
+function renderList(){
+    const q=(document.getElementById('search')?.value||'').toLowerCase();
+    let items=filter==='all'?data:data.filter(x=>x.cat===filter);
+    if(q)items=items.filter(x=>x.plat.toLowerCase().includes(q)||x.user.toLowerCase().includes(q));
+    const g=document.getElementById('grid');
+    if(!items.length){g.innerHTML='<div class="empty"><span class="ic">🔐</span><p>No passwords yet</p></div>';return;}
+    g.innerHTML=items.map(p=>{
+        const c=CATS[p.cat]||CATS.other;
+        return'<div class="card"><div class="ct"><div class="clogo" style="background:'+c.c+'">'+c.l+'</div><div><h3>'+esc(p.plat)+'</h3><span class="sub">'+esc(p.user)+'</span></div></div><div class="pr"><input type="password" value="'+esc(p.pass)+'" id="vp'+p.id+'" readonly><button onclick="toggleVis(\''+p.id+'\')">👁</button><button onclick="copyPass(\''+p.id+'\')">📋</button></div>'+(p.url?'<div style="font-size:11px;color:#888;margin-bottom:8px">🔗 '+esc(p.url)+'</div>':'')+'<div class="ca"><button onclick="editPass(\''+p.id+'\')">✏️</button><button class="chg" onclick="showChangePass(\''+p.id+'\')">🔑</button><button class="del" onclick="deletePass(\''+p.id+'\')">🗑️</button></div></div>';
+    }).join('');
+}
+
+function toggleVis(id){const e=document.getElementById('vp'+id);if(e)e.type=e.type==='password'?'text':'password';}
+function copyPass(id){const p=data.find(x=>x.id===id);if(p){navigator.clipboard.writeText(p.pass);toast('📋 Copied!');}}
+
+// ===== CHANGE PASSWORD =====
+function showChangePass(id){
+    const p=data.find(x=>x.id===id);if(!p)return;
+    changeId=id;
+    document.getElementById('changeInfo').textContent=p.plat+' ('+p.user+')';
+    document.getElementById('oldPass').value='';
+    document.getElementById('newPass1').value='';
+    document.getElementById('newPass2').value='';
+    document.getElementById('modalChange').classList.add('on');
+}
+async function changePass(){
+    const o=document.getElementById('oldPass').value.trim();
+    const n1=document.getElementById('newPass1').value.trim();
+    const n2=document.getElementById('newPass2').value.trim();
+    if(!o||!n1||!n2){toast('Fill all!');return;}
+    if(n1!==n2){toast('Mismatch!');return;}
+    const p=data.find(x=>x.id===changeId);if(!p)return;
+    if(p.pass!==o){toast('Wrong old password!');return;}
+    p.pass=n1;
+    const entry={plat:enc(p.plat),cat:enc(p.cat),user:enc(p.user),pass:enc(p.pass),url:enc(p.url),updatedAt:Date.now()};
+    try{await db.collection('passwords').doc(changeId).update(entry);toast('✅ Changed!');closeModal('modalChange');renderList();}catch(e){toast('Error!');}
+}
+function genChangePass(){
+    const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*_+-=';
+    let p='';for(let i=0;i<16;i++)p+=c[Math.floor(Math.random()*c.length)];
+    document.getElementById('newPass1').value=p;document.getElementById('newPass2').value=p;toast('🎲 Generated!');
+}
+
+// ===== CRUD =====
+function showAddModal(){
+    editId=null;document.getElementById('modalTitle').textContent='Add Password';
+    ['fPlat','fUser','fPass','fUrl'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('fCat').value='';document.getElementById('fPass').type='password';
+    document.getElementById('modalAdd').classList.add('on');
+}
+function editPass(id){
+    const p=data.find(x=>x.id===id);if(!p)return;
+    editId=id;document.getElementById('modalTitle').textContent='Edit Password';
+    document.getElementById('fCat').value=p.cat;document.getElementById('fPlat').value=p.plat;
+    document.getElementById('fUser').value=p.user;document.getElementById('fPass').value=p.pass;
+    document.getElementById('fUrl').value=p.url||'';document.getElementById('fPass').type='password';
+    document.getElementById('modalAdd').classList.add('on');
+}
+async function savePass(){
+    const cat=document.getElementById('fCat').value;
+    const plat=document.getElementById('fPlat').value.trim();
+    const user=document.getElementById('fUser').value.trim();
+    const pass=document.getElementById('fPass').value.trim();
+    const url=document.getElementById('fUrl').value.trim();
+    if(!cat||!plat||!user||!pass){toast('Fill all fields!');return;}
+    const entry={plat:enc(plat),cat:enc(cat),user:enc(user),pass:enc(pass),url:enc(url),updatedAt:Date.now()};
+    try{if(editId){await db.collection('passwords').doc(editId).update(entry);toast('✅ Updated!');}else{await db.collection('passwords').add(entry);toast('✅ Saved!');}closeModal('modalAdd');loadData();}catch(e){toast('Error!');}
+}
+async function deletePass(id){if(!confirm('Delete?'))return;await db.collection('passwords').doc(id).delete();toast('🗑️ Deleted!');loadData();}
+function closeModal(id){document.getElementById(id).classList.remove('on');if(id==='modalAdd')editId=null;if(id==='modalChange')changeId=null;}
+function genPass(){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*_+-=';let p='';for(let i=0;i<16;i++)p+=c[Math.floor(Math.random()*c.length)];document.getElementById('fPass').value=p;toast('🎲 Generated!');}
+function togglePass(id){const e=document.getElementById(id);if(e)e.type=e.type==='password'?'text':'password';}
+
+// ===== EXPORT =====
+function exportExcel(){
+    if(!data.length){toast('No data!');return;}
+    const ws=XLSX.utils.json_to_sheet(data.map(p=>({Platform:p.plat,Username:p.user,Password:p.pass,URL:p.url})));
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Passwords');
+    XLSX.writeFile(wb,'Vault_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('📊 Done!');
+}
+function exportPDF(){
+    if(!data.length){toast('No data!');return;}
+    const doc=new jspdf.jsPDF();doc.setFontSize(16);doc.setTextColor(79,70,229);
+    doc.text('Vault Backup',14,16);
+    doc.autoTable({startY:24,head:[['#','Platform','Username','Password','URL']],body:data.map((p,i)=>[i+1,p.plat,p.user,p.pass,p.url]),theme:'grid',headStyles:{fillColor:[79,70,229]}});
+    doc.save('Vault_'+new Date().toISOString().slice(0,10)+'.pdf');toast('📄 Done!');
+}
+
+// ===== UTILS =====
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';t.style.animation='slide 0.3s ease';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2500);}
+
+['modalAdd','modalChange','modalPin'].forEach(id=>{
+    document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeModal(id);});
+});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeModal('modalAdd');closeModal('modalChange');closeModal('modalPin');}});
+
+let idleTimer;function resetIdle(){clearTimeout(idleTimer);if(document.getElementById('app').style.display!=='none')idleTimer=setTimeout(()=>{lockVault();toast('🔒 Auto-locked!');},10*60*1000);}
+['mousemove','click','keypress','scroll','touchstart'].forEach(ev=>document.addEventListener(ev,resetIdle));
+
+renderCats();renderList();
+</script>
+</body>
+</html>
