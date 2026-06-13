@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Password Vault Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root{--bg:#040712;--surface:#0a0e1c;--card:#0f1328;--border:rgba(255,255,255,0.05);--accent:#6366f1;--accent2:#8b5cf6;--text:#e2e4f0;--muted:#636780;--danger:#f43f5e;--success:#10b981;--warning:#f59e0b;--radius:18px;--radius-sm:10px}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse at 15% 40%,rgba(99,102,241,0.07) 0%,transparent 55%),radial-gradient(ellipse at 85% 25%,rgba(139,92,246,0.05) 0%,transparent 55%),radial-gradient(ellipse at 50% 80%,rgba(16,185,129,0.03) 0%,transparent 55%)}
+        .lock-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
+        .lock-card{background:rgba(14,17,30,0.95);backdrop-filter:blur(50px);border:1px solid var(--border);border-radius:28px;padding:44px 34px;text-align:center;width:380px;box-shadow:0 0 80px rgba(99,102,241,0.08),0 30px 80px rgba(0,0,0,0.7)}
+        .lock-icon{width:80px;height:80px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:40px;color:#fff;box-shadow:0 20px 50px rgba(99,102,241,0.35)}
+        .lock-card h2{font-size:24px;font-weight:700;margin-bottom:4px}
+        .lock-card .sub{color:var(--muted);font-size:13px;margin-bottom:26px}
+        .dots{display:flex;justify-content:center;gap:16px;margin-bottom:6px}
+        .dots span{width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,0.1);transition:all 0.3s}
+        .dots span.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 20px rgba(99,102,241,0.6)}
+        .dots span.err{background:var(--danger);border-color:var(--danger)}
+        .pin-error{color:var(--danger);font-size:12px;height:20px;opacity:0;transition:0.2s;margin-bottom:6px}.pin-error.show{opacity:1}
+        .lock-msg{color:var(--warning);font-size:12px;margin-bottom:6px;display:none}.lock-msg.show{display:block}
+        .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:265px;margin:0 auto}
+        .keypad button{padding:17px;border-radius:15px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.025);color:#fff;font-size:20px;font-weight:600;cursor:pointer}
+        .keypad button:hover{background:rgba(255,255,255,0.05)}.keypad button:active{transform:scale(.92);background:var(--accent)}
+        .keypad .clr{color:var(--danger);font-size:13px}
+        .app{display:none}
+        .topbar{background:rgba(10,14,28,0.75);backdrop-filter:blur(40px);border-bottom:1px solid var(--border);padding:15px 26px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:10px}
+        .topbar h1{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+        .container{max-width:1400px;margin:auto;padding:24px 20px}
+        .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+        .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;transition:all 0.35s}
+        .stat-card:hover{transform:translateY(-3px);box-shadow:0 15px 40px rgba(0,0,0,0.35)}
+        .stat-card .stat-icon{font-size:26px;margin-bottom:8px}.stat-card .stat-value{font-size:30px;font-weight:700}
+        .stat-card .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-top:3px}
+        .stat-card.total{border-left:3px solid var(--accent)}.stat-card.strong{border-left:3px solid var(--success)}
+        .stat-card.weak{border-left:3px solid var(--danger)}.stat-card.score{border-left:3px solid var(--warning)}
+        .btn{padding:10px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.25s;display:inline-flex;align-items:center;gap:6px;border:none}
+        .btn-primary{background:linear-gradient(135deg,var(--accent),#4f46e5);color:#fff;box-shadow:0 4px 20px rgba(99,102,241,0.3)}
+        .btn-primary:hover{box-shadow:0 8px 30px rgba(99,102,241,0.5);transform:translateY(-2px)}
+        .btn-ghost{background:rgba(255,255,255,0.03);color:#ccc;border:1px solid var(--border)}.btn-ghost:hover{background:rgba(255,255,255,0.06)}
+        .btn-danger{background:var(--danger);color:#fff}.btn-success{background:var(--success);color:#fff}
+        .btn-sm{padding:7px 13px;font-size:11px;border-radius:8px}
+        .search-box{display:flex;gap:10px;margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:5px;transition:all 0.3s}
+        .search-box:focus-within{border-color:var(--accent)}
+        .search-box input{flex:1;padding:14px 18px;background:transparent;border:none;color:var(--text);font-size:15px;outline:none;font-family:inherit}
+        .search-box input::placeholder{color:var(--muted)}.search-box .search-icon{padding:14px 0 14px 18px;color:var(--muted);font-size:18px}
+        .cats{display:flex;gap:7px;margin-bottom:18px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px}
+        .cats button{padding:8px 15px;border-radius:22px;border:1px solid var(--border);background:rgba(255,255,255,0.02);color:var(--muted);cursor:pointer;font-size:12px;white-space:nowrap;transition:all 0.25s;display:flex;align-items:center;gap:5px;font-weight:500}
+        .cats button.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent;box-shadow:0 4px 20px rgba(99,102,241,0.3)}
+        .cat-dot{width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
+        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:16px}
+        .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;transition:all 0.35s}
+        .card:hover{transform:translateY(-4px);box-shadow:0 20px 50px rgba(0,0,0,0.45);border-color:rgba(255,255,255,0.1)}
+        .card-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+        .card-logo{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:17px;flex-shrink:0;box-shadow:0 8px 20px rgba(0,0,0,0.3)}
+        .card-info h3{font-size:14px;font-weight:600;margin:0;display:flex;align-items:center;gap:6px}.card-info .cu{color:var(--muted);font-size:11px}
+        .pass-row{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,0.35);border-radius:10px;padding:7px 10px;margin-bottom:10px}
+        .pass-row input{flex:1;background:none;border:none;color:#d4d6e0;font-family:monospace;font-size:13px;outline:none;min-width:0}
+        .pass-row .icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:5px 7px;border-radius:6px;font-size:14px}
+        .pass-row .icon-btn:hover{color:#fff;background:rgba(255,255,255,0.08)}
+        .card-actions{display:flex;gap:5px;flex-wrap:wrap}
+        .card-actions button{padding:6px 11px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.02);color:var(--muted);cursor:pointer;font-size:11px;font-weight:500;transition:0.2s}
+        .card-actions button:hover{background:var(--accent);color:#fff;border-color:var(--accent)}.card-actions .del-btn:hover{background:var(--danger);border-color:var(--danger)}
+        .strength-badge{padding:3px 8px;border-radius:12px;font-size:9px;font-weight:600;display:inline-block}
+        .strength-strong{background:rgba(16,185,129,0.12);color:var(--success)}.strength-weak{background:rgba(244,63,94,0.12);color:var(--danger)}.strength-medium{background:rgba(245,158,11,0.12);color:var(--warning)}
+        .empty-state{text-align:center;padding:90px 20px;grid-column:1/-1;color:var(--muted)}.empty-state .empty-icon{font-size:60px;display:block;margin-bottom:18px}
+        .mo{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;z-index:999;padding:18px}
+        .mo.on{display:flex}.modal{background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:30px;width:100%;max-width:470px;max-height:90vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,0.65)}
+        .modal h3{font-size:19px;margin-bottom:20px;text-align:center;font-weight:700}.modal label{font-size:11px;color:var(--muted);display:block;margin:10px 0 4px;text-transform:uppercase;letter-spacing:0.6px;font-weight:600}
+        .modal input,.modal select{width:100%;padding:11px 15px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:11px;color:var(--text);font-size:14px;outline:none;margin-bottom:8px;font-family:inherit}
+        .modal input:focus,.modal select:focus{border-color:var(--accent)}.modal-btns{display:flex;gap:10px;margin-top:18px}.modal-btns button{flex:1;padding:12px;font-size:14px;font-weight:600}
+        .pin-modal-card{text-align:center}.pin-modal-card .pv-dots{display:flex;justify-content:center;gap:12px;margin:14px 0}
+        .pin-modal-card .pv-dots span{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,0.1);transition:0.2s}
+        .pin-modal-card .pv-dots span.pv-on{background:var(--accent);border-color:var(--accent)}.pin-modal-card .pv-dots span.pv-err{background:var(--danger);border-color:var(--danger)}
+        .toast{position:fixed;top:18px;right:18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 22px;color:var(--text);z-index:9999;display:none;font-size:13px;box-shadow:0 20px 50px rgba(0,0,0,0.55)}
+        .sd{width:7px;height:7px;border-radius:50%;display:inline-block}.sd.on{background:var(--success);box-shadow:0 0 10px var(--success)}.sd.off{background:var(--danger);box-shadow:0 0 10px var(--danger)}
+        @media(max-width:768px){.stats-bar{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.lock-card{width:92%;padding:34px 22px}.topbar{padding:12px 14px}.container{padding:14px 10px}}
+    </style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<!-- MASTER LOCK -->
+<div class="lock-screen" id="lockScreen"><div class="lock-card"><div class="lock-icon">🔐</div><h2>Password Vault</h2><p class="sub">Enter 4-digit Master PIN</p><div class="dots" id="dots"><span></span><span></span><span></span><span></span></div><p class="pin-error" id="pinMsg">Invalid PIN</p><p class="lock-msg" id="lockMsg"></p><div class="keypad"><button onclick="MP('1')">1</button><button onclick="MP('2')">2</button><button onclick="MP('3')">3</button><button onclick="MP('4')">4</button><button onclick="MP('5')">5</button><button onclick="MP('6')">6</button><button onclick="MP('7')">7</button><button onclick="MP('8')">8</button><button onclick="MP('9')">9</button><button class="clr" onclick="MC()">Clear</button><button onclick="MP('0')">0</button><button onclick="MB()">⌫</button></div></div></div>
+
+<!-- APP -->
+<div class="app" id="app"><div class="topbar"><h1>🔐 Password Vault<span class="sd" id="syncDot"></span></h1><div style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" onclick="RE('excel')">📊 Excel</button><button class="btn btn-ghost btn-sm" onclick="RE('pdf')">📄 PDF</button><button class="btn btn-danger btn-sm" onclick="LK()">🔒 Lock</button></div></div><div class="container"><div class="stats-bar"><div class="stat-card total"><div class="stat-icon">🔑</div><div class="stat-value" id="totalCount">0</div><div class="stat-label">Total</div></div><div class="stat-card strong"><div class="stat-icon">💪</div><div class="stat-value" id="strongCount">0</div><div class="stat-label">Strong</div></div><div class="stat-card weak"><div class="stat-icon">⚠️</div><div class="stat-value" id="weakCount">0</div><div class="stat-label">Weak</div></div><div class="stat-card score"><div class="stat-icon">🛡️</div><div class="stat-value" id="securityScore">0%</div><div class="stat-label">Score</div></div></div><div class="search-box"><span class="search-icon">🔍</span><input type="text" id="searchInput" placeholder="Search by platform, username, email or URL..." oninput="RL()"><button class="btn btn-primary" onclick="SA()">+ Add Password</button></div><div class="cats" id="cats"></div><div class="grid" id="grid"></div></div></div>
+
+<!-- ADD MODAL -->
+<div class="mo" id="modalAdd"><div class="modal"><h3 id="modalTitle">Add Password</h3><label>Category</label><select id="fCat" onchange="AF()"><option value="">Select category...</option><option value="google">Google</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="whatsapp">WhatsApp</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="x">X</option><option value="linkedin">LinkedIn</option><option value="netflix">Netflix</option><option value="amazon">Amazon</option><option value="microsoft">Microsoft</option><option value="apple">Apple</option><option value="github">GitHub</option><option value="banking">Banking</option><option value="crypto">Crypto</option><option value="gaming">Gaming</option><option value="wifi">WiFi</option><option value="other">Other</option></select><label>Platform *</label><input id="fPlat" placeholder="e.g. Google"><label>Email/Username *</label><input id="fUser" placeholder="user@example.com"><label>Password *</label><div style="display:flex;gap:6px"><input type="password" id="fPass" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="TG('fPass')">👁</button></div><button class="btn btn-ghost btn-sm" onclick="GP()" style="width:100%;margin-top:6px;justify-content:center">🎲 Generate</button><label>URL</label><input id="fUrl" placeholder="https://..."><div class="modal-btns"><button class="btn btn-primary" onclick="SV()">💾 Save</button><button class="btn btn-ghost" onclick="CM('modalAdd')">Cancel</button></div></div></div>
+
+<!-- VIEW PIN MODAL -->
+<div class="mo" id="modalView"><div class="modal" style="max-width:390px"><div class="pin-modal-card"><h3>👁️ View Password</h3><p style="color:var(--muted);font-size:12px;margin-bottom:4px">Enter 4-digit PIN</p><p style="color:var(--accent);font-size:13px;font-weight:600" id="viewPlatName"></p><div class="pv-dots" id="pvDots"><span></span><span></span><span></span><span></span></div><p style="color:var(--danger);font-size:12px;height:18px;opacity:0" id="pvError">Wrong PIN!</p><div class="keypad" style="margin-top:6px"><button onclick="VP('1')">1</button><button onclick="VP('2')">2</button><button onclick="VP('3')">3</button><button onclick="VP('4')">4</button><button onclick="VP('5')">5</button><button onclick="VP('6')">6</button><button onclick="VP('7')">7</button><button onclick="VP('8')">8</button><button onclick="VP('9')">9</button><button class="clr" onclick="VC()">Clear</button><button onclick="VP('0')">0</button><button onclick="VB()">⌫</button></div><button class="btn btn-ghost btn-sm" onclick="CM('modalView')" style="width:100%;margin-top:10px;justify-content:center">Cancel</button></div></div></div>
+
+<!-- EXPORT PIN MODAL -->
+<div class="mo" id="modalExport"><div class="modal" style="max-width:390px"><div class="pin-modal-card"><h3 id="exportModalTitle">📤 Export Data</h3><p style="color:var(--muted);font-size:12px;margin-bottom:4px">Enter 4-digit PIN to export</p><p style="color:var(--warning);font-size:13px;font-weight:600">Export PIN: 8267</p><div class="pv-dots" id="epDots"><span></span><span></span><span></span><span></span></div><p style="color:var(--danger);font-size:12px;height:18px;opacity:0" id="epError">Wrong PIN!</p><div class="keypad" style="margin-top:6px"><button onclick="EP('1')">1</button><button onclick="EP('2')">2</button><button onclick="EP('3')">3</button><button onclick="EP('4')">4</button><button onclick="EP('5')">5</button><button onclick="EP('6')">6</button><button onclick="EP('7')">7</button><button onclick="EP('8')">8</button><button onclick="EP('9')">9</button><button class="clr" onclick="EC()">Clear</button><button onclick="EP('0')">0</button><button onclick="EB()">⌫</button></div><button class="btn btn-ghost btn-sm" onclick="CM('modalExport')" style="width:100%;margin-top:10px;justify-content:center">Cancel</button></div></div></div>
+
+<script>
+// ===== FIREBASE =====
+let db=null;
+try{firebase.initializeApp({apiKey:"AIzaSyBfXDEZ_adnxEy48btk7mmKUurZaErbrH8",authDomain:"personal-password-vault-71cd7.firebaseapp.com",projectId:"personal-password-vault-71cd7",storageBucket:"personal-password-vault-71cd7.firebasestorage.app",messagingSenderId:"1072747028062",appId:"1:1072747028062:web:ec42d40758850a18475ecf"});db=firebase.firestore();db.enablePersistence().catch(function(){});}catch(e){}
+
+// ===== ENCRYPTION =====
+let EK=null;const S="PV_SX9_K2M7";
+function dk(p){return CryptoJS.SHA256(p+S).toString();}
+function enc(t){if(!EK)return t;return CryptoJS.AES.encrypt(t,EK).toString();}
+function dec(c){if(!EK)return c;try{return CryptoJS.AES.decrypt(c,EK).toString(CryptoJS.enc.Utf8)||c;}catch(e){return c;}}
+
+// ===== MASTER PIN =====
+const MASTER=['8976','5782'];let mp='',ma=0,ml=0;
+function MP(d){if(mp.length>=4||ml>Date.now())return;mp+=d;DM();if(mp.length===4)setTimeout(CMT,150);}
+function MB(){mp=mp.slice(0,-1);DM();}function MC(){mp='';DM();document.getElementById('pinMsg').classList.remove('show');}
+function DM(){document.querySelectorAll('#dots span').forEach(function(d,i){d.className=i<mp.length?'on':'';});}
+function CMT(){if(ml>Date.now()){var s=Math.ceil((ml-Date.now())/1000);document.getElementById('lockMsg').classList.add('show');document.getElementById('lockMsg').textContent='Wait '+s+'s';mp='';DM();return;}if(MASTER.includes(mp)){ma=0;EK=dk(mp);document.getElementById('lockScreen').style.display='none';document.getElementById('app').style.display='block';mp='';DM();document.getElementById('pinMsg').classList.remove('show');document.getElementById('lockMsg').classList.remove('show');LD();toast('Unlocked!');}else{ma++;if(ma>=5){ml=Date.now()+30*60*1000;ma=0;document.getElementById('lockMsg').classList.add('show');document.getElementById('lockMsg').textContent='LOCKED 30 MIN!';}document.querySelectorAll('#dots span').forEach(function(d){d.classList.add('err');});document.getElementById('pinMsg').classList.add('show');setTimeout(function(){mp='';DM();document.getElementById('pinMsg').classList.remove('show');},700);}}
+function LK(){EK=null;document.getElementById('app').style.display='none';document.getElementById('lockScreen').style.display='flex';passwords=[];mp='';DM();toast('Locked!');}
+
+// ===== VIEW PIN =====
+const VIEW_PIN='6782';let vp='',vt=null;
+function VP(d){if(vp.length>=4)return;vp+=d;DV();if(vp.length===4)setTimeout(CVT,150);}
+function VB(){vp=vp.slice(0,-1);DV();}function VC(){vp='';DV();document.getElementById('pvError').style.opacity='0';}
+function DV(){document.querySelectorAll('#pvDots span').forEach(function(d,i){d.className=i<vp.length?'pv-on':'';});}
+function CVT(){if(vp===VIEW_PIN){vp='';DV();document.getElementById('pvError').style.opacity='0';var p=passwords.find(function(x){return x.id===vt;});if(p){document.getElementById('vp'+vt).type='text';setTimeout(function(){document.getElementById('vp'+vt).type='password';},10000);toast('Visible 10s!');}CM('modalView');}else{document.querySelectorAll('#pvDots span').forEach(function(d){d.classList.add('pv-err');});document.getElementById('pvError').style.opacity='1';setTimeout(function(){vp='';DV();document.getElementById('pvError').style.opacity='0';},700);}}
+
+// ===== EXPORT PIN =====
+const EXPORT_PIN='8267';let ep='',et=null;
+function EP(d){if(ep.length>=4)return;ep+=d;DE();if(ep.length===4)setTimeout(CET,150);}
+function EB(){ep=ep.slice(0,-1);DE();}function EC(){ep='';DE();document.getElementById('epError').style.opacity='0';}
+function DE(){document.querySelectorAll('#epDots span').forEach(function(d,i){d.className=i<ep.length?'pv-on':'';});}
+function CET(){
+    if(ep===EXPORT_PIN){
+        ep='';DE();document.getElementById('epError').style.opacity='0';
+        CM('modalExport');
+        // DIRECT CALL - NO setTimeout ISSUE
+        setTimeout(function(){
+            if(et==='excel'){doExportExcelNow();}
+            else if(et==='pdf'){doExportPDFNow();}
+        },100);
+    }else{
+        document.querySelectorAll('#epDots span').forEach(function(d){d.classList.add('pv-err');});
+        document.getElementById('epError').style.opacity='1';
+        setTimeout(function(){ep='';DE();document.getElementById('epError').style.opacity='0';},700);
+    }
+}
+function RE(type){et=type;ep='';DE();document.getElementById('epError').style.opacity='0';document.getElementById('exportModalTitle').textContent=type==='excel'?'📊 Export Excel':'📄 Export PDF';document.getElementById('modalExport').classList.add('on');}
+
+// ===== EXPORT FUNCTIONS - DIRECT =====
+function doExportExcelNow(){
+    console.log('EXPORTING EXCEL...');
+    if(!passwords||passwords.length===0){toast('No data to export!');return;}
+    try{
+        var exportData=[];
+        for(var i=0;i<passwords.length;i++){exportData.push({Platform:passwords[i].plat,Username:passwords[i].user,Password:passwords[i].pass,URL:passwords[i].url||''});}
+        var ws=XLSX.utils.json_to_sheet(exportData);
+        var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Passwords');
+        XLSX.writeFile(wb,'Vault_Backup_'+new Date().toISOString().slice(0,10)+'.xlsx');
+        toast('✅ Excel downloaded! Check your downloads folder.');
+    }catch(e){toast('Error: '+e.message);}
+}
+
+function doExportPDFNow(){
+    console.log('EXPORTING PDF...');
+    if(!passwords||passwords.length===0){toast('No data to export!');return;}
+    try{
+        var doc=new jspdf.jsPDF();
+        doc.setFontSize(16);doc.setTextColor(99,102,241);
+        doc.text('Password Vault Backup',14,16);
+        var body=[];
+        for(var i=0;i<passwords.length;i++){body.push([i+1,passwords[i].plat,passwords[i].user,passwords[i].pass,passwords[i].url||'']);}
+        doc.autoTable({startY:22,head:[['#','Platform','Username','Password','URL']],body:body,theme:'grid',headStyles:{fillColor:[99,102,241]},styles:{fontSize:7}});
+        doc.save('Vault_Backup_'+new Date().toISOString().slice(0,10)+'.pdf');
+        toast('✅ PDF downloaded! Check your downloads folder.');
+    }catch(e){toast('Error: '+e.message);}
+}
+
+// ===== DATA =====
+let passwords=[],filter='all',editId=null;
+const CATS={google:{n:'Google',c:'#ea4335',l:'G',u:'https://google.com'},facebook:{n:'Facebook',c:'#1877f2',l:'f',u:'https://facebook.com'},instagram:{n:'Instagram',c:'#e4405f',l:'📸',u:'https://instagram.com'},whatsapp:{n:'WhatsApp',c:'#25d366',l:'💬',u:'https://web.whatsapp.com'},youtube:{n:'YouTube',c:'#ff0000',l:'▶',u:'https://youtube.com'},tiktok:{n:'TikTok',c:'#000',l:'🎵',u:'https://tiktok.com'},x:{n:'X',c:'#1da1f2',l:'𝕏',u:'https://x.com'},linkedin:{n:'LinkedIn',c:'#0a66c2',l:'in',u:'https://linkedin.com'},netflix:{n:'Netflix',c:'#e50914',l:'N',u:'https://netflix.com'},amazon:{n:'Amazon',c:'#ff9900',l:'A',u:'https://amazon.com'},microsoft:{n:'Microsoft',c:'#00a4ef',l:'M',u:'https://microsoft.com'},apple:{n:'Apple',c:'#000',l:'🍎',u:'https://apple.com'},github:{n:'GitHub',c:'#333',l:'GH',u:'https://github.com'},banking:{n:'Banking',c:'#10b981',l:'🏦',u:''},crypto:{n:'Crypto',c:'#f7931a',l:'₿',u:''},gaming:{n:'Gaming',c:'#8b5cf6',l:'🎮',u:''},wifi:{n:'WiFi',c:'#06b6d4',l:'📶',u:''},other:{n:'Other',c:'#6b7280',l:'📌',u:''}};
+function AF(){var c=document.getElementById('fCat').value;if(c&&CATS[c]){document.getElementById('fPlat').value=CATS[c].n;document.getElementById('fUrl').value=CATS[c].u||'';}}
+
+async function LD(){
+    if(db){try{var s=await db.collection('passwords').get();passwords=[];s.forEach(function(d){var r=d.data();passwords.push({id:d.id,plat:dec(r.plat||''),cat:dec(r.cat||'other'),user:dec(r.user||''),pass:dec(r.pass||''),url:dec(r.url||''),updatedAt:r.updatedAt||0});});passwords.sort(function(a,b){return(b.updatedAt||0)-(a.updatedAt||0);});US(true);}catch(e){US(false);LL();}}else{US(false);LL();}
+    RC();RL();US2();
+}
+function LL(){var s=localStorage.getItem('pv_data');if(s){try{passwords=JSON.parse(s);}catch(e){passwords=[];}}}
+function SL(){localStorage.setItem('pv_data',JSON.stringify(passwords));}
+function US(on){var d=document.getElementById('syncDot');d.className='sd '+(on?'on':'off');d.title=on?'Cloud':'Offline';}
+function US2(){var t=passwords.length,s=passwords.filter(function(p){return p.pass.length>=12;}).length,w=passwords.filter(function(p){return p.pass.length<8;}).length;document.getElementById('totalCount').textContent=t;document.getElementById('strongCount').textContent=s;document.getElementById('weakCount').textContent=w;document.getElementById('securityScore').textContent=t>0?Math.round(((t-w)/t)*100)+'%':'0%';}
+function GS(p){if(p.length>=12)return'strong';if(p.length>=8)return'medium';return'weak';}
+
+async function SV(){
+    var cat=document.getElementById('fCat').value,plat=document.getElementById('fPlat').value.trim(),user=document.getElementById('fUser').value.trim(),pass=document.getElementById('fPass').value.trim(),url=document.getElementById('fUrl').value.trim();
+    if(!plat||!user||!pass){toast('Fill all fields!');return;}
+    var entry={plat:plat,cat:cat||'other',user:user,pass:pass,url:url,updatedAt:Date.now()};
+    if(editId){var idx=passwords.findIndex(function(p){return p.id===editId;});if(idx>=0)passwords[idx]=Object.assign({},passwords[idx],entry,{id:editId});toast('Updated!');}
+    else{entry.id='local_'+Date.now();passwords.unshift(entry);toast('Saved!');}
+    SL();
+    if(db){try{var fe={plat:enc(plat),cat:enc(cat||'other'),user:enc(user),pass:enc(pass),url:enc(url),updatedAt:Date.now()};if(editId&&!editId.startsWith('local_')){await db.collection('passwords').doc(editId).update(fe);}else if(!editId){var dr=await db.collection('passwords').add(fe);passwords[0].id=dr.id;SL();}}catch(e){}}
+    CM('modalAdd');RC();RL();US2();
+}
+async function DL(id){if(!confirm('Delete?'))return;passwords=passwords.filter(function(p){return p.id!==id;});SL();if(db&&!id.startsWith('local_')){try{await db.collection('passwords').doc(id).delete();}catch(e){}}RL();US2();toast('Deleted!');}
+
+function RC(){var h='<button class="'+(filter==='all'?'on':'')+'" onclick="SF(\'all\')">📁 All</button>';for(var k in CATS){var v=CATS[k];h+='<button class="'+(filter===k?'on':'')+'" onclick="SF(\''+k+'\')"><span class="cat-dot" style="background:'+v.c+'">'+v.l+'</span>'+v.n+'</button>';}document.getElementById('cats').innerHTML=h;}
+function SF(f){filter=f;RC();RL();}
+
+function RL(){
+    var q=(document.getElementById('searchInput')?.value||'').toLowerCase();
+    var items=filter==='all'?passwords:passwords.filter(function(x){return x.cat===filter;});
+    if(q)items=items.filter(function(x){return x.plat.toLowerCase().indexOf(q)!==-1||x.user.toLowerCase().indexOf(q)!==-1||(x.url||'').toLowerCase().indexOf(q)!==-1;});
+    var g=document.getElementById('grid');
+    if(!items.length){g.innerHTML='<div class="empty-state"><span class="empty-icon">🔐</span><h3>No passwords found</h3></div>';return;}
+    g.innerHTML=items.map(function(p){var c=CATS[p.cat]||CATS.other;var st=GS(p.pass);var badge='';if(st==='strong')badge='<span class="strength-badge strength-strong">STRONG</span>';else if(st==='weak')badge='<span class="strength-badge strength-weak">WEAK</span>';else badge='<span class="strength-badge strength-medium">MEDIUM</span>';return'<div class="card"><div class="card-header"><div class="card-logo" style="background:'+c.c+'">'+c.l+'</div><div class="card-info"><h3>'+esc(p.plat)+' '+badge+'</h3><span class="cu">'+esc(p.user)+'</span></div></div><div class="pass-row"><input type="password" value="'+esc(p.pass)+'" id="vp'+p.id+'" readonly><button class="icon-btn" onclick="RV(\''+p.id+'\',\''+esc(p.plat)+'\')">👁</button><button class="icon-btn" onclick="CP(\''+p.id+'\')">📋</button></div>'+(p.url?'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔗 '+esc(p.url)+'</div>':'')+'<div class="card-actions"><button onclick="ED(\''+p.id+'\')">✏️ Edit</button><button class="del-btn" onclick="DL(\''+p.id+'\')">🗑️ Delete</button></div></div>';}).join('');
+}
+
+function RV(id,plat){vt=id;vp='';DV();document.getElementById('pvError').style.opacity='0';document.getElementById('viewPlatName').textContent=plat;document.getElementById('modalView').classList.add('on');}
+function CP(id){var p=passwords.find(function(x){return x.id===id;});if(p){navigator.clipboard.writeText(p.pass);toast('Copied!');}}
+
+function SA(){editId=null;document.getElementById('modalTitle').textContent='Add Password';['fPlat','fUser','fPass','fUrl'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('fCat').value='';document.getElementById('fPass').type='password';document.getElementById('modalAdd').classList.add('on');}
+function ED(id){var p=passwords.find(function(x){return x.id===id;});if(!p)return;editId=id;document.getElementById('modalTitle').textContent='Edit Password';document.getElementById('fCat').value=p.cat;document.getElementById('fPlat').value=p.plat;document.getElementById('fUser').value=p.user;document.getElementById('fPass').value=p.pass;document.getElementById('fUrl').value=p.url||'';document.getElementById('fPass').type='password';document.getElementById('modalAdd').classList.add('on');}
+function CM(id){document.getElementById(id).classList.remove('on');if(id==='modalAdd')editId=null;if(id==='modalView'){vt=null;vp='';DV();}if(id==='modalExport'){et=null;ep='';DE();}}
+function GP(){var c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*_+-=';var p='';for(var i=0;i<16;i++)p+=c[Math.floor(Math.random()*c.length)];document.getElementById('fPass').value=p;toast('Generated!');}
+function TG(id){var e=document.getElementById(id);if(e)e.type=e.type==='password'?'text':'password';}
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(function(){t.style.display='none';},2500);}
+
+['modalAdd','modalView','modalExport'].forEach(function(id){document.getElementById(id).addEventListener('click',function(e){if(e.target===this)CM(id);});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){CM('modalAdd');CM('modalView');CM('modalExport');}});
+var idle;function RI(){clearTimeout(idle);if(document.getElementById('app').style.display!=='none')idle=setTimeout(function(){LK();toast('Auto-locked!');},10*60*1000);}
+['mousemove','click','keypress','scroll','touchstart'].forEach(function(ev){document.addEventListener(ev,RI);});
+RC();RL();US2();
+</script>
+</body>
+</html>
